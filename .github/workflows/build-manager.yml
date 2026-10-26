@@ -1,0 +1,376 @@
+name: Build FWJZ Bot Master Pro
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup App Directory & Source Code
+        run: |
+          mkdir -p FWJZMaster
+          cat << 'EOF' > FWJZMaster/main.m
+          #import <UIKit/UIKit.h>
+          #import <QuartzCore/QuartzCore.h>
+
+          @interface BotItem : NSObject
+          @property (nonatomic, copy) NSString *name;
+          @property (nonatomic, copy) NSString *type; // "TG" hoặc "DC"
+          @property (nonatomic, copy) NSString *status;
+          @property (nonatomic, assign) NSInteger users;
+          @property (nonatomic, assign) NSInteger pingMs;
+          @end
+
+          @implementation BotItem
+          @end
+
+          @interface MasterViewController : UIViewController <UITableViewDelegate, UITableViewDataSource, UITextFieldDelegate>
+          @property (nonatomic, strong) UISegmentedControl *segment;
+          @property (nonatomic, strong) UITableView *tableView;
+          @property (nonatomic, strong) NSMutableArray<BotItem *> *botList;
+          @property (nonatomic, strong) UILabel *lblServerStatus;
+          @property (nonatomic, strong) UILabel *lblCpuRam;
+          @property (nonatomic, strong) UITextField *txtEndpoint;
+          @property (nonatomic, strong) UIActivityIndicatorView *spinner;
+          @end
+
+          @implementation MasterViewController
+
+          - (void)viewDidLoad {
+              [super viewDidLoad];
+              self.view.backgroundColor = [UIColor colorWithRed:0.04 green:0.05 blue:0.08 alpha:1.0];
+              [self initMockData];
+              [self setupUI];
+          }
+
+          - (void)initMockData {
+              self.botList = [NSMutableArray array];
+
+              BotItem *b1 = [[BotItem alloc] init];
+              b1.name = @"FWJZ Store Bot";
+              b1.type = @"TG";
+              b1.status = @"ACTIVE";
+              b1.users = 1420;
+              b1.pingMs = 38;
+              [self.botList addObject:b1];
+
+              BotItem *b2 = [[BotItem alloc] init];
+              b2.name = @"Key License Authenticator";
+              b2.type = @"TG";
+              b2.status = @"ACTIVE";
+              b2.users = 854;
+              b2.pingMs = 45;
+              [self.botList addObject:b2];
+
+              BotItem *b3 = [[BotItem alloc] init];
+              b3.name = @"Community Manager Guard";
+              b3.type = @"DC";
+              b3.status = @"ACTIVE";
+              b3.users = 3200;
+              b3.pingMs = 52;
+              [self.botList addObject:b3];
+
+              BotItem *b4 = [[BotItem alloc] init];
+              b4.name = @"Backup Database Worker";
+              b4.type = @"DC";
+              b4.status = @"STANDBY";
+              b4.users = 0;
+              b4.pingMs = 110;
+              [self.botList addObject:b4];
+          }
+
+          - (void)setupUI {
+              CGFloat w = self.view.bounds.size.width;
+
+              // 1. Top Navigation Bar mang phong cách Neon Glass
+              UIView *topBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 110)];
+              topBar.backgroundColor = [UIColor colorWithRed:0.07 green:0.08 blue:0.12 alpha:0.85];
+              [self.view addSubview:topBar];
+
+              UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(20, 50, w - 100, 24)];
+              title.text = @"⚡ FWJZ BOT MASTER";
+              title.textColor = [UIColor colorWithRed:0.0 green:0.95 blue:0.85 alpha:1.0];
+              title.font = [UIFont boldSystemFontOfSize:19];
+              [topBar addSubview:title];
+
+              UILabel *subTitle = [[UILabel alloc] initWithFrame:CGRectMake(20, 76, w - 100, 16)];
+              subTitle.text = @"Server Control & Multi-Bot Dashboard";
+              subTitle.textColor = [UIColor colorWithWhite:0.55 alpha:1.0];
+              subTitle.font = [UIFont systemFontOfSize:11.5];
+              [topBar addSubview:subTitle];
+
+              UIButton *btnReload = [UIButton buttonWithType:UIButtonTypeCustom];
+              btnReload.frame = CGRectMake(w - 55, 54, 38, 38);
+              btnReload.backgroundColor = [UIColor colorWithRed:0.12 green:0.15 blue:0.24 alpha:0.9];
+              btnReload.layer.cornerRadius = 19.0;
+              btnReload.layer.borderWidth = 1.0;
+              btnReload.layer.borderColor = [UIColor cyanColor].CGColor;
+              [btnReload setTitle:@"🔄" forState:UIControlStateNormal];
+              [btnReload addTarget:self action:@selector(reloadAction) forControlEvents:UIControlEventTouchUpInside];
+              [topBar addSubview:btnReload];
+
+              self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+              self.spinner.color = [UIColor cyanColor];
+              self.spinner.center = btnReload.center;
+              [topBar addSubview:self.spinner];
+
+              // 2. Thẻ Server Health Overview
+              UIView *card = [[UIView alloc] initWithFrame:CGRectMake(16, 122, w - 32, 70)];
+              card.backgroundColor = [UIColor colorWithRed:0.08 green:0.10 blue:0.15 alpha:0.9];
+              card.layer.cornerRadius = 14.0;
+              card.layer.borderWidth = 1.0;
+              card.layer.borderColor = [UIColor colorWithWhite:0.2 alpha:0.6].CGColor;
+              [self.view addSubview:card];
+
+              UIView *dot = [[UIView alloc] initWithFrame:CGRectMake(14, 16, 8, 8)];
+              dot.backgroundColor = [UIColor colorWithRed:0.1 green:0.9 blue:0.5 alpha:1.0];
+              dot.layer.cornerRadius = 4.0;
+              [card addSubview:dot];
+
+              self.lblServerStatus = [[UILabel alloc] initWithFrame:CGRectMake(28, 12, 160, 16)];
+              self.lblServerStatus.text = @"VPS NODE-01: ONLINE";
+              self.lblServerStatus.textColor = [UIColor colorWithWhite:0.9 alpha:1.0];
+              self.lblServerStatus.font = [UIFont boldSystemFontOfSize:12];
+              [card addSubview:self.lblServerStatus];
+
+              self.lblCpuRam = [[UILabel alloc] initWithFrame:CGRectMake(14, 38, card.bounds.size.width - 28, 20)];
+              self.lblCpuRam.text = @"CPU: 12%  |  RAM: 1.4GB / 4GB  |  Ping: 28ms";
+              self.lblCpuRam.textColor = [UIColor cyanColor];
+              self.lblCpuRam.font = [UIFont fontWithName:@"Menlo" size:11.5];
+              [card addSubview:self.lblCpuRam];
+
+              // 3. Segmented Filter (All, Telegram, Discord)
+              self.segment = [[UISegmentedControl alloc] initWithItems:@[@"Tất cả", @"Telegram", @"Discord"]];
+              self.segment.frame = CGRectMake(16, 204, w - 32, 34);
+              self.segment.selectedSegmentIndex = 0;
+              self.segment.backgroundColor = [UIColor colorWithWhite:0.10 alpha:1.0];
+              self.segment.selectedSegmentTintColor = [UIColor colorWithRed:0.15 green:0.22 blue:0.35 alpha:1.0];
+              [self.segment setTitleTextAttributes:@{NSForegroundColorAttributeName:[UIColor whiteColor], NSFontAttributeName:[UIFont boldSystemFontOfSize:12]} forState:UIControlStateNormal];
+              [self.segment addTarget:self action:@selector(segmentChanged:) forControlEvents:UIControlEventValueChanged];
+              [self.view addSubview:self.segment];
+
+              // 4. Danh sách các Bot Card
+              self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(16, 248, w - 32, self.view.bounds.size.height - 258) style:UITableViewStylePlain];
+              self.tableView.backgroundColor = [UIColor clearColor];
+              self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+              self.tableView.showsVerticalScrollIndicator = NO;
+              self.tableView.delegate = self;
+              self.tableView.dataSource = self;
+              [self.view addSubview:self.tableView];
+          }
+
+          - (void)segmentChanged:(UISegmentedControl *)seg {
+              [self.tableView reloadData];
+          }
+
+          - (NSArray<BotItem *> *)filteredBots {
+              if (self.segment.selectedSegmentIndex == 1) {
+                  NSPredicate *p = [NSPredicate predicateWithFormat:@"type == 'TG'"];
+                  return [self.botList filteredArrayUsingPredicate:p];
+              } else if (self.segment.selectedSegmentIndex == 2) {
+                  NSPredicate *p = [NSPredicate predicateWithFormat:@"type == 'DC'"];
+                  return [self.botList filteredArrayUsingPredicate:p];
+              }
+              return self.botList;
+          }
+
+          - (void)reloadAction {
+              UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+              [feed impactOccurred];
+              [self.spinner startAnimating];
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                  [self.spinner stopAnimating];
+                  [self.tableView reloadData];
+              });
+          }
+
+          #pragma mark - TableView Handlers
+          - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+              return [self filteredBots].count;
+          }
+
+          - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+              return 96.0;
+          }
+
+          - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+              UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"BotCell"];
+              if (!cell) {
+                  cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"BotCell"];
+                  cell.backgroundColor = [UIColor clearColor];
+                  cell.selectionStyle = UITableViewCellSelectionStyleNone;
+
+                  UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 6, tableView.bounds.size.width, 84)];
+                  box.tag = 200;
+                  box.backgroundColor = [UIColor colorWithRed:0.08 green:0.09 blue:0.14 alpha:0.95];
+                  box.layer.cornerRadius = 12.0;
+                  box.layer.borderWidth = 1.0;
+                  box.layer.borderColor = [UIColor colorWithWhite:0.2 alpha:0.5].CGColor;
+                  [cell.contentView addSubview:box];
+
+                  // Icon badge (TG hoặc DC)
+                  UILabel *badge = [[UILabel alloc] initWithFrame:CGRectMake(12, 14, 38, 22)];
+                  badge.tag = 201;
+                  badge.layer.cornerRadius = 6.0;
+                  badge.layer.masksToBounds = YES;
+                  badge.textAlignment = NSTextAlignmentCenter;
+                  badge.font = [UIFont boldSystemFontOfSize:11];
+                  [box addSubview:badge];
+
+                  // Tên Bot
+                  UILabel *nameLbl = [[UILabel alloc] initWithFrame:CGRectMake(58, 14, box.bounds.size.width - 150, 22)];
+                  nameLbl.tag = 202;
+                  nameLbl.textColor = [UIColor whiteColor];
+                  nameLbl.font = [UIFont boldSystemFontOfSize:14];
+                  [box addSubview:nameLbl];
+
+                  // Thống kê users, ping
+                  UILabel *metaLbl = [[UILabel alloc] initWithFrame:CGRectMake(14, 46, box.bounds.size.width - 140, 22)];
+                  metaLbl.tag = 203;
+                  metaLbl.textColor = [UIColor colorWithWhite:0.6 alpha:1.0];
+                  metaLbl.font = [UIFont fontWithName:@"Menlo" size:11.5];
+                  [box addSubview:metaLbl];
+
+                  // Nút Restart bot nhanh
+                  UIButton *btnRest = [UIButton buttonWithType:UIButtonTypeCustom];
+                  btnRest.frame = CGRectMake(box.bounds.size.width - 76, 26, 64, 32);
+                  btnRest.backgroundColor = [UIColor colorWithRed:0.18 green:0.24 blue:0.36 alpha:1.0];
+                  btnRest.layer.cornerRadius = 8.0;
+                  [btnRest setTitle:@"Khởi lại" forState:UIControlStateNormal];
+                  [btnRest setTitleColor:[UIColor cyanColor] forState:UIControlStateNormal];
+                  btnRest.titleLabel.font = [UIFont boldSystemFontOfSize:11.5];
+                  [box addSubview:btnRest];
+              }
+
+              UIView *box = [cell.contentView viewWithTag:200];
+              UILabel *badge = [box viewWithTag:201];
+              UILabel *nameLbl = [box viewWithTag:202];
+              UILabel *metaLbl = [box viewWithTag:203];
+
+              BotItem *item = [self filteredBots][indexPath.row];
+              nameLbl.text = item.name;
+              metaLbl.text = [NSString stringWithFormat:@"%ld Users  •  %ldms", (long)item.users, (long)item.pingMs];
+
+              if ([item.type isEqualToString:@"TG"]) {
+                  badge.text = @"TG";
+                  badge.backgroundColor = [UIColor colorWithRed:0.0 green:0.55 blue:0.9 alpha:0.25];
+                  badge.textColor = [UIColor colorWithRed:0.3 green:0.75 blue:1.0 alpha:1.0];
+              } else {
+                  badge.text = @"DC";
+                  badge.backgroundColor = [UIColor colorWithRed:0.35 green:0.4 blue:0.95 alpha:0.25];
+                  badge.textColor = [UIColor colorWithRed:0.6 green:0.65 blue:1.0 alpha:1.0];
+              }
+
+              return cell;
+          }
+
+          @end
+
+          @interface AppDelegate : UIResponder <UIApplicationDelegate>
+          @property (strong, nonatomic) UIWindow *window;
+          @end
+
+          @implementation AppDelegate
+          - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+              self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+              self.window.rootViewController = [[MasterViewController alloc] init];
+              [self.window makeKeyAndVisible];
+              return YES;
+          }
+          @end
+
+          int main(int argc, char * argv[]) {
+              @autoreleasepool {
+                  return UIApplicationMain(argc, argv, nil, NSStringFromClass([AppDelegate class]));
+              }
+          }
+          EOF
+
+          # Info.plist chuẩn hóa 100% trường cấu trúc iOS để ESign parse không bao giờ báo lỗi
+          cat << 'EOF' > FWJZMaster/Info.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleDevelopmentRegion</key>
+              <string>vi</string>
+              <key>CFBundleExecutable</key>
+              <string>FWJZMaster</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.fwjz.botmaster</string>
+              <key>CFBundleInfoDictionaryVersion</key>
+              <string>6.0</string>
+              <key>CFBundleName</key>
+              <string>FWJZ Master</string>
+              <key>CFBundleDisplayName</key>
+              <string>FWJZ Master</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0.0</string>
+              <key>CFBundleSignature</key>
+              <string>????</string>
+              <key>CFBundleVersion</key>
+              <string>1</string>
+              <key>MinimumOSVersion</key>
+              <string>14.0</string>
+              <key>LSRequiresIPhoneOS</key>
+              <true/>
+              <key>DTPlatformName</key>
+              <string>iphoneos</string>
+              <key>DTSDKName</key>
+              <string>iphoneos17.0</string>
+              <key>CFBundleSupportedPlatforms</key>
+              <array>
+                  <string>iPhoneOS</string>
+              </array>
+              <key>UIDeviceFamily</key>
+              <array>
+                  <integer>1</integer>
+                  <integer>2</integer>
+              </array>
+              <key>UIRequiredDeviceCapabilities</key>
+              <array>
+                  <string>arm64</string>
+              </array>
+              <key>NSAppTransportSecurity</key>
+              <dict>
+                  <key>NSAllowsArbitraryLoads</key>
+                  <true/>
+              </dict>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Compile and Package IPA with Pure Bundle Structure
+        run: |
+          rm -rf Payload FWJZMaster.ipa
+          mkdir -p Payload/FWJZMaster.app
+
+          # Biên dịch mã nguồn nhị phân kiến trúc arm64
+          xcrun -sdk iphoneos clang -target arm64-apple-ios14.0 \
+            -fobjc-arc -framework UIKit -framework Foundation -framework QuartzCore \
+            FWJZMaster/main.m -o Payload/FWJZMaster.app/FWJZMaster
+
+          chmod 755 Payload/FWJZMaster.app/FWJZMaster
+          cp FWJZMaster/Info.plist Payload/FWJZMaster.app/
+
+          # Tạo file provisioning rỗng để ESign không báo thiếu file cấu hình
+          touch Payload/FWJZMaster.app/embedded.mobileprovision
+
+          # Ký Ad-hoc để cấu trúc Mach-O có chữ ký số hợp lệ
+          codesign --force --deep --sign - Payload/FWJZMaster.app
+
+          # Nén chuẩn IPA (không lồng folder cha, giữ quyền thực thi)
+          zip -qry FWJZMaster.ipa Payload/
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FWJZ-BotMaster-IPA
+          path: FWJZMaster.ipa
